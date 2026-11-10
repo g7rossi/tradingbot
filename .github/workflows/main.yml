@@ -1,11 +1,7 @@
 name: trading-bot
 
 on:
-  schedule:
-    - cron: "40 12 * * 1-5"   # premarket, 8:40am EDT
-    - cron: "40 13 * * 1-5"   # premarket, 8:40am EST
-    - cron: "25 20 * * 1-5"   # recap, 4:25pm EDT
-    - cron: "25 21 * * 1-5"   # recap, 4:25pm EST
+
   workflow_dispatch:
     inputs:
       job:
