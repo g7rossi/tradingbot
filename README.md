@@ -1,78 +1,63 @@
-# S&P 500 trading bot (paper trading)
+# Automated S&P 500 Trading System
 
-Trades SPY and SSO on Alpaca's paper (fake-money) account and texts you twice a day:
+**Gavin Rossi · Finance, Rutgers Business School**
 
-- **~8:40am ET, premarket:** what the bot sees and which orders it queued for the open.
-- **~4:25pm ET, after the close:** today's fills, account P&L, and what tomorrow looks like.
+A rules-based trading system that trades the S&P 500 automatically every market day and reports to my phone before the open and after the close. I chose the strategy by researching and backtesting 15+ candidate strategies on about 20 years of daily market data, keeping only the ones that held up in both halves of the test period. It currently runs on a paper (simulated-money) brokerage account.
+
+![Growth of $10,000: this strategy vs. SPY buy-and-hold](docs/equity_curve.png)
+
+## Results (backtest, May 2007 – Oct 2026, after trading costs)
+
+| | This strategy | S&P 500 buy-and-hold (SPY) |
+| --- | --- | --- |
+| Annual return | **13.7%** | 10.2% |
+| Worst peak-to-trough drop | **−27.5%** | −56.5% |
+| Worst calendar year | **−16.3%** (2018) | −38.3% (2008) |
+| Return ÷ volatility | **0.84** | 0.59 |
+| $10,000 became | **$120,100** | $65,200 |
+
+Backtest results are hypothetical and don't guarantee future performance. Live paper trading began in November 2026.
 
 ## The strategy
 
-| Half | Rule | How often it trades |
+The account is split into two halves that work in opposite market conditions.
+
+| Half | Rule | Trades |
 | --- | --- | --- |
-| Trend (50%) | At each month-end, hold SPY if it closed above its 200-day average; otherwise hold T-bills (BIL). | ~1–2 times a year |
-| IBS (50%) | IBS = where SPY closed within the day's range (0 = at the low, 1 = at the high). After a SPY close with IBS below 0.2, buy **SSO** (a fund that moves 2x the S&P 500 each day); sell after a close with IBS above 0.8. Idle money sits in BIL. | ~28 round trips a year |
+| **Trend (50%)** | At each month-end, hold SPY if it closed above its 200-day moving average; otherwise move to T-bills (BIL). Sits out long bear markets. | ~1–2 per year |
+| **Mean reversion (50%)** | IBS (Internal Bar Strength) = where SPY closed within the day's high-low range. After a weak close (IBS < 0.2), buy SSO, a 2x S&P 500 fund. Sell after a strong close (IBS > 0.8). Profits from short-term overreactions. | ~28 round trips per year |
 
-All orders are **market-on-open** orders placed before 9:28am, acting on the previous day's close. Backtested on real SSO prices from mid-2006 to Oct 2026, that earned about **13.7% a year with a worst drop of 27.5%**, versus 10.2% and 56% for buying and holding SPY. Past results don't guarantee future ones.
+The halves complement each other. Mean reversion does best in volatile years (2008, 2020, 2022) and the trend filter does best in steady bull markets. Together they cut the worst drop roughly in half compared with the index.
 
-The leverage cuts both ways: the IBS half by itself once lost 47% in three weeks (Sep–Oct 2008). The trend half is what kept the whole account's worst drop near 27%. To run the IBS half without leverage (about 9.8% a year, worst drop 17%), add a repository variable `IBS_SYMBOL` set to `SPY`.
+## Research process
 
-## One-time setup (about 30 minutes)
+Every candidate had to beat buy-and-hold on a risk-adjusted basis in **both** 2007–2015 and 2016–2026, after trading costs, to survive.
 
-### 1. Alpaca paper account
-1. Sign up at alpaca.markets. A paper-only account is free and needs no money.
-2. In the dashboard, make sure you're on the **Paper** account, then generate API keys.
-3. Copy the **API Key ID** and **Secret Key**. You'll paste them into GitHub in step 3, never into a chat or a file.
+1. **Started with published strategies.** Dual momentum (Antonacci) plus an RSI(2) sleeve was the first pick. **It failed the backtest**, trailing the S&P 500 by about 3.7 points a year: its switch into bonds in June 2022 hit just as bonds crashed, and it was fragile to its lookback setting.
+2. **Tested 13 daily and calendar strategies.** These included overnight holding, intraday, turn-of-the-month, moving-average crossovers, Bollinger bands, RSI(2), volatility targeting, and IBS. Every strategy that trades daily lost money once costs were included. Only the 200-day filter and IBS passed.
+3. **Stress-tested IBS.** Re-ran it with next-day-open execution instead of the close, across several entry/exit thresholds, and against higher trading costs.
+4. **Tested leverage.** Ran the IBS half on a synthetic 2x fund, then validated with real SSO prices. Rejected 3x leverage (a 65% worst drop) and a "leverage only in uptrends" rule, which performed worse.
 
-### 2. GitHub repository
-1. Create a free account at github.com.
-2. Create a new **private** repository, for example `trading-bot`.
-3. Upload every file and folder from this project, keeping the structure, including the hidden `.github` folder. The simplest route is GitHub's "uploading an existing file" link, dragging in the unzipped folder's contents.
+Scripts are in [`backtest/`](backtest/). Price data (Stooq) is in [`data/`](data/).
 
-### 3. Add your keys as secrets
-In the repository: **Settings → Secrets and variables → Actions**.
+## How it works
 
-**Secrets** tab, "New repository secret" for each:
+```
+Scheduled runs (weekdays)
+   ├─ 8:40am ET  premarket:  pull SPY prices → compute signals → place market-on-open orders → message
+   └─ 4:25pm ET  recap:      read fills + account P&L → preview tomorrow's signals → message
+        │
+        ├─ Alpaca API: market data + paper brokerage
+        └─ Telegram / Twilio: notifications
+```
 
-| Name | Value |
-| --- | --- |
-| `ALPACA_API_KEY` | your Alpaca paper API Key ID |
-| `ALPACA_SECRET_KEY` | your Alpaca paper Secret Key |
+- **Stateless:** each run recomputes the correct position from price history, so a missed day corrects itself.
+- **Accurate signals:** IBS is rebuilt from regular-session (9:30–4:00) bars, because daily bars can include after-hours trades.
+- **Verified:** the live signal code matched the backtest's positions on all 1,201 trading days checked (2022–2026).
+- **Safe to re-run:** open orders are cancelled before new ones are placed, and the bot only touches the symbols it manages.
 
-**Variables** tab:
+## Tools
 
-| Name | Value |
-| --- | --- |
-| `START_EQUITY` | your paper account's starting balance, e.g. `100000` |
-| `NOTIFY` | `twilio` for SMS, `telegram` for Telegram, or `console` to only log |
+Python (pandas, NumPy, matplotlib) · Alpaca brokerage API · GitHub Actions · Telegram / Twilio
 
-### 4. Texts
-
-**Option A: real SMS through Twilio**
-1. Sign up at twilio.com. The free trial includes credit and can text your own verified phone number. Trial texts start with a short "Sent from your Twilio trial account" note.
-2. Get a Twilio phone number from the console.
-3. Add these secrets: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (the Twilio number, like `+15551234567`), and `TEXT_TO_NUMBER` (your cell, same format).
-4. Set the `NOTIFY` variable to `twilio`.
-
-US carriers require registration for business texting. If you upgrade from the trial, Twilio walks you through it; texting only yourself on the trial avoids it.
-
-**Option B: Telegram (free, no registration)**
-1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token. Save it as the `TELEGRAM_BOT_TOKEN` secret.
-2. Send your new bot any message, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the number after `"chat":{"id":`. Save it as the `TELEGRAM_CHAT_ID` secret.
-3. Set the `NOTIFY` variable to `telegram`.
-
-### 5. Turn it on and test
-1. Open the **Actions** tab and enable workflows if GitHub asks.
-2. Click **trading-bot → Run workflow**, choose `recap`, and run it. Within a minute or two you should get a text. If not, open the run to read the error.
-3. From then on it runs by itself every weekday and skips market holidays.
-
-A manual `premarket` run places real paper orders. Only run it before 9:28am ET or after the close; Alpaca rejects market-on-open orders during the trading day.
-
-## Good to know
-
-- **No memory needed.** Each run recomputes the right position from price history, so a missed run fixes itself the next morning.
-- **Re-runs are safe.** The premarket job cancels any unfilled orders before placing new ones.
-- **Timing.** GitHub's scheduler can start jobs 10–30 minutes late. The premarket window runs to 9:20am, so a late start still beats the 9:28am cutoff.
-- **Testing without Alpaca:** `python -m bot.main premarket --dry-run --csv data/spy_us_d.csv --asof 2026-10-15`
-- **Backtests:** run from this folder: `python backtest/backtest.py` (dual momentum), `python backtest/daily_strategies.py` (daily strategies), `python backtest/sso_synthetic.py` and `python backtest/sso_real.py` (the 2x versions). Price data is in `data/` (Stooq, through Oct 15, 2026).
-- **Buying power.** Sells and buys go in at the same open, so the bot relies on the paper account's default margin to cover the moment between them. It never borrows beyond that: targets always add up to 98% of the account.
-- **Going live** later means setting `ALPACA_PAPER` to `false` in the workflow and using live keys. Don't do this until months of paper results look like the backtest.
+To run it yourself, see the [setup guide](docs/SETUP.md).
