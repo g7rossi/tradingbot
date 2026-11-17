@@ -4,7 +4,7 @@
 
 A rules-based trading system that trades the S&P 500 automatically every market day and reports to my phone before the open and after the close. I chose the strategy by researching and backtesting 15+ candidate strategies on about 20 years of daily market data, keeping only the ones that held up in both halves of the test period. It currently runs on a paper (simulated-money) brokerage account.
 
-![Growth of $10,000: this strategy vs. SPY buy-and-hold](docs/equity_curve.png)
+![Growth of $10,000: this strategy vs. SPY buy-and-hold](equity_curve.png)
 
 ## Results (backtest, May 2007 – Oct 2026, after trading costs)
 
@@ -60,4 +60,4 @@ Scheduled runs (weekdays)
 
 Python (pandas, NumPy, matplotlib) · Alpaca brokerage API · GitHub Actions · Telegram / Twilio
 
-To run it yourself, see the [setup guide](docs/SETUP.md).
+To run it yourself, see the [setup guide](SETUP.md).
